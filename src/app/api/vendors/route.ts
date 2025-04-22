@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { companyName, email, contactName, phone, tier, location, materialClass } = body;
+    const { companyName, email, contactName, phone, tier, location, materialClasses } = body;
 
     if (!companyName || !email) {
       return NextResponse.json(
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
       phone,
       tier,
       location,
-      materialClass,
+      materialClasses,
     });
 
     return NextResponse.json({ vendor });
