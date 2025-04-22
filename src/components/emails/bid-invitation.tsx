@@ -55,7 +55,7 @@ export const BidInvitationEmail = ({
             </Text>
             
             <Section style={bidDetails}>
-              <Heading as="h2" style={bidTitle}>
+              <Heading as="h2" style={bidTitleStyle}>
                 {bidTitle}
               </Heading>
               {bidDescription && (
@@ -135,10 +135,11 @@ const bidDetails = {
   marginBottom: '16px',
 };
 
-const bidTitle = {
-  fontSize: '18px',
-  color: '#1a56db',
-  marginBottom: '8px',
+const bidTitleStyle = {
+  fontSize: '24px',
+  fontWeight: 'bold',
+  margin: '20px 0',
+  color: '#333',
 };
 
 const text = {
