@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "main": "next.config.js",
   "scripts": {
-    "preinstall": "npm install --legacy-peer-deps",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
