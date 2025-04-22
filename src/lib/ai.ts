@@ -1,6 +1,6 @@
 import { BidItem, VendorSubmission } from "@/types";
 import { validateBidItems as validateItems } from "./validators";
-import { validateVendorSubmission as validateSubmission } from "./validators";
+import { validateVendorSubmission as validateVendorSubmission } from "./validators";
 
 // DeepSeek API integration for AI validation
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || "default_key";
@@ -114,7 +114,7 @@ export async function validateBidItems(items: BidItem[]): Promise<ValidationResu
 export async function validateSubmission(submission: VendorSubmission): Promise<ValidationResult> {
   try {
     // First perform basic validation
-    const validationError = validateSubmission(submission);
+    const validationError = validateVendorSubmission(submission);
     if (validationError) {
       return {
         isValid: false,
