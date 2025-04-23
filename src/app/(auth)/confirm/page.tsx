@@ -1,103 +1,68 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAuth } from "@/context/auth-context";
+import { supabase } from "@/lib/supabase";
 
-export default function ConfirmPage() {
-  const router = useRouter();
+function ConfirmContent() {
   const searchParams = useSearchParams();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const { user } = useAuth();
+  const token = searchParams.get("token");
+  const type = searchParams.get("type");
 
-  useEffect(() => {
-    const confirmEmail = async () => {
-      const token = searchParams.get("token");
-      const type = searchParams.get("type");
+  const handleConfirmation = async () => {
+    if (!token || !type || !user) return;
 
-      if (token && type === "email") {
-        try {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: token,
-            type: "email",
-          });
-
-          if (error) throw error;
-
-          setMessage("Email confirmed successfully! You can now log in.");
-          setTimeout(() => {
-            router.push("/login");
-          }, 3000);
-        } catch (error) {
-          setError("Failed to confirm email. The link may have expired.");
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        setError("Invalid confirmation link");
-        setLoading(false);
-      }
-    };
-
-    confirmEmail();
-  }, [searchParams, router]);
-
-  const handleResendConfirmation = async () => {
-    setLoading(true);
-    setError(null);
     try {
-      const { error } = await supabase.auth.resend({
-        type: "signup",
-        email: searchParams.get("email") || "",
-      });
-
-      if (error) throw error;
-
-      setMessage("Confirmation email has been resent. Please check your inbox.");
+      if (type === "email") {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: "email",
+        });
+        if (error) throw error;
+      }
     } catch (error) {
-      setError("Failed to resend confirmation email. Please try again.");
-    } finally {
-      setLoading(false);
+      console.error("Confirmation error:", error);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">
-            Email Confirmation
+          <CardTitle className="text-center text-2xl font-bold">
+            Confirm Your {type === "email" ? "Email" : "Action"}
           </CardTitle>
-          <CardDescription className="text-center">
-            {loading ? "Confirming your email..." : "Email confirmation status"}
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          {message && (
-            <Alert>
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          )}
-          {error && error.includes("expired") && (
-            <Button
-              onClick={handleResendConfirmation}
-              className="w-full"
-              disabled={loading}
-            >
-              {loading ? "Resending..." : "Resend Confirmation Email"}
-            </Button>
-          )}
+          <p className="text-center text-gray-600">
+            Please click the button below to confirm your {type === "email" ? "email address" : "action"}.
+          </p>
+          <Button
+            onClick={handleConfirmation}
+            className="w-full bg-blue-600 hover:bg-blue-700"
+          >
+            Confirm
+          </Button>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function ConfirmPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <ConfirmContent />
+    </Suspense>
   );
 } 
