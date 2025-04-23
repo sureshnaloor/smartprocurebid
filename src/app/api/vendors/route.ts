@@ -1,66 +1,110 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getVendors, addVendor } from "@/lib/db";
-import { getUserFromRequest } from "@/lib/auth";
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 
-export async function GET(req: NextRequest) {
+export async function GET() {
+  const supabase = createRouteHandlerClient({ cookies });
+  
   try {
-    const user = await getUserFromRequest(req);
+    const { data: { session } } = await supabase.auth.getSession();
     
-    if (!user) {
+    if (!session) {
       return NextResponse.json(
-        { error: "Unauthorized" },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    const vendors = await getVendors();
-    return NextResponse.json({ vendors });
+    const { data: vendors, error } = await supabase
+      .from('vendors')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return NextResponse.json(vendors);
   } catch (error) {
-    console.error("Failed to get vendors:", error);
+    console.error('Error fetching vendors:', error);
     return NextResponse.json(
-      { error: "Failed to get vendors" },
+      { error: 'Failed to fetch vendors' },
       { status: 500 }
     );
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
+  const supabase = createRouteHandlerClient({ cookies });
+  
   try {
-    const user = await getUserFromRequest(req);
+    const { data: { session } } = await supabase.auth.getSession();
     
-    if (!user) {
+    if (!session) {
       return NextResponse.json(
-        { error: "Unauthorized" },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
 
-    const body = await req.json();
-    const { companyName, email, contactName, phone, tier, location, materialClasses } = body;
+    const body = await request.json();
+    const { 
+      company_name,
+      contact_name,
+      email,
+      phone,
+      address,
+      city,
+      state,
+      zip_code,
+      country,
+      business_type,
+      description,
+      website,
+      tax_id
+    } = body;
 
-    if (!companyName || !email) {
+    // Validate required fields
+    if (!company_name || !contact_name || !email || !phone || !address || 
+        !city || !state || !zip_code || !country || !business_type || !tax_id) {
       return NextResponse.json(
-        { error: "Company name and email are required" },
+        { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    const vendor = await addVendor({
-      buyerId: user.id,
-      companyName,
-      email,
-      contactName,
-      phone,
-      tier,
-      location,
-      materialClasses,
-    });
+    const { data, error } = await supabase
+      .from('vendors')
+      .insert([{
+        user_id: session.user.id,
+        company_name,
+        contact_name,
+        email,
+        phone,
+        address,
+        city,
+        state,
+        zip_code,
+        country,
+        business_type,
+        description,
+        website,
+        tax_id
+      }])
+      .select()
+      .single();
 
-    return NextResponse.json({ vendor });
+    if (error) {
+      console.error('Error creating vendor:', error);
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(data);
   } catch (error) {
-    console.error("Failed to add vendor:", error);
+    console.error('Error creating vendor:', error);
     return NextResponse.json(
-      { error: "Failed to add vendor" },
+      { error: 'Failed to create vendor' },
       { status: 500 }
     );
   }

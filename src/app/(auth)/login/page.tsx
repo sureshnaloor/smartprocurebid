@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,20 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const searchParams = useSearchParams();
+  const { login, resendConfirmation } = useAuth();
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showResend, setShowResend] = useState(false);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,10 +32,27 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await login(email, password);
-      router.push("/dashboard");
+      await login(formData.email, formData.password);
     } catch (err) {
-      setError("Invalid email or password. Please try again.");
+      const error = err as Error;
+      setError(error.message);
+      if (error.message.includes("Email not confirmed")) {
+        setShowResend(true);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await resendConfirmation(formData.email);
+      setError("Confirmation email has been resent. Please check your inbox.");
+      setShowResend(false);
+    } catch (err) {
+      setError("Failed to resend confirmation email. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -36,9 +62,9 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Login</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">Sign in</CardTitle>
           <CardDescription className="text-center">
-            Enter your credentials to access your account
+            Enter your email and password to access your account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -54,41 +80,54 @@ export default function LoginPage() {
               </label>
               <Input
                 id="email"
+                name="email"
                 type="email"
-                placeholder="name@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                value={formData.email}
+                onChange={handleChange}
                 required
               />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </label>
-                <Link href="#" className="text-sm text-primary hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
+              <label htmlFor="password" className="text-sm font-medium">
+                Password
+              </label>
               <Input
                 id="password"
+                name="password"
                 type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={formData.password}
+                onChange={handleChange}
                 required
               />
             </div>
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "Logging in..." : "Login"}
+              {isLoading ? "Signing in..." : "Sign in"}
             </Button>
+            {showResend && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleResendConfirmation}
+                disabled={isLoading}
+              >
+                {isLoading ? "Resending..." : "Resend Confirmation Email"}
+              </Button>
+            )}
           </form>
         </CardContent>
-        <CardFooter className="flex justify-center">
-          <p className="text-sm text-center text-gray-500">
-            Don&apos;t have an account?{" "}
+        <CardFooter className="flex flex-col space-y-4">
+          <p className="text-sm text-center text-gray-600">
+            Don't have an account?{" "}
             <Link href="/register" className="text-primary hover:underline">
               Register
+            </Link>
+          </p>
+          <p className="text-sm text-center text-gray-600">
+            Forgot your password?{" "}
+            <Link href="/reset-password" className="text-primary hover:underline">
+              Reset it
             </Link>
           </p>
         </CardFooter>

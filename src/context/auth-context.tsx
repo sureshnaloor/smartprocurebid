@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User } from "@/types";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 interface AuthContextType {
   user: User | null;
@@ -10,69 +11,113 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, role: string, companyName: string) => Promise<void>;
   logout: () => void;
+  resendConfirmation: (email: string) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  login: async () => {},
-  register: async () => {},
-  logout: () => {},
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Check if user is already logged in
   useEffect(() => {
-    const checkAuth = async () => {
+    // Check active session
+    const checkSession = async () => {
       try {
-        // In a real app, this would validate the session/token
-        // Here we'll just check localStorage for simplicity in our MVP
-        const storedUser = localStorage.getItem("user");
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+
+        if (session?.user) {
+          // Use the user data from the session instead of making an additional database call
+          setUser({
+            id: session.user.id,
+            email: session.user.email!,
+            name: session.user.user_metadata.name,
+            role: session.user.user_metadata.role,
+            companyName: session.user.user_metadata.company_name,
+          });
         }
       } catch (error) {
-        console.error("Auth check failed:", error);
+        console.error("Error checking session:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    checkAuth();
-  }, []);
+    checkSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email!,
+          name: session.user.user_metadata.name,
+          role: session.user.user_metadata.role,
+          companyName: session.user.user_metadata.company_name,
+        });
+        router.push('/dashboard');
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        router.push('/login');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   const login = async (email: string, password: string) => {
-    setLoading(true);
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Login failed");
+      if (error) {
+        if (error.message === 'Email not confirmed') {
+          throw new Error('Please check your email for the confirmation link before logging in.');
+        }
+        throw error;
       }
 
-      const data = await response.json();
-      setUser(data.user);
-      
-      // Store user in localStorage
-      localStorage.setItem("user", JSON.stringify(data.user));
+      if (data.user) {
+        setUser({
+          id: data.user.id,
+          email: data.user.email!,
+          name: data.user.user_metadata.name,
+          role: data.user.user_metadata.role,
+          companyName: data.user.user_metadata.company_name,
+        });
+        router.push('/dashboard');
+      }
     } catch (error) {
       console.error("Login error:", error);
       throw error;
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const resendConfirmation = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email,
+      });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error resending confirmation:", error);
+      throw error;
     }
   };
 
@@ -83,44 +128,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: string,
     companyName: string
   ) => {
-    setLoading(true);
     try {
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password, name, role, companyName }),
+      // Register user with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            role,
+            company_name: companyName
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Registration failed");
-      }
+      if (authError) throw authError;
 
-      const data = await response.json();
-      setUser(data.user);
-      
-      // Store user in localStorage
-      localStorage.setItem("user", JSON.stringify(data.user));
+      if (authData.user) {
+        // Create user profile in the users table
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert([
+            {
+              id: authData.user.id,
+              email,
+              name,
+              role,
+              company_name: companyName,
+            },
+          ]);
+
+        if (profileError) throw profileError;
+
+        // If role is vendor, create a vendor profile
+        if (role === 'vendor') {
+          const { error: vendorError } = await supabase
+            .from('vendors')
+            .insert([
+              {
+                id: authData.user.id,
+                email,
+                company_name: companyName,
+                contact_name: name,
+              },
+            ]);
+
+          if (vendorError) throw vendorError;
+        }
+
+        // Show success message and redirect to confirmation page
+        router.push(`/auth/confirm?email=${encodeURIComponent(email)}`);
+      }
     } catch (error) {
       console.error("Registration error:", error);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("user");
-    // This is a simple client-side logout
-    // In a real app, you'd also invalidate the session/token on the server
-    router.push("/login");
+  const logout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      // Clear the user state
+      setUser(null);
+      
+      // Force a hard navigation to ensure all state is cleared
+      window.location.href = '/login';
+    } catch (error) {
+      console.error("Logout error:", error);
+      throw error;
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, resendConfirmation }}>
       {children}
     </AuthContext.Provider>
   );

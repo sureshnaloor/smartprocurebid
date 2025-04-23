@@ -1,12 +1,11 @@
 // User types
 export interface User {
   id: string;
-  name: string;
   email: string;
-  password?: string;
-  role: string;
-  companyName: string;
-  createdAt: Date;
+  name: string;
+  role: 'buyer' | 'vendor';
+  companyName?: string;
+  createdAt?: string;
 }
 
 // Vendor types

@@ -20,10 +20,11 @@ import { Button } from "@/components/ui/button";
 
 export function DashboardSidebar() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -35,6 +36,17 @@ export function DashboardSidebar() {
     
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   const navigation = [
     {
@@ -184,10 +196,11 @@ export function DashboardSidebar() {
           <Button
             variant="ghost"
             className={cn("w-full justify-start text-sm", collapsed && "justify-center")}
-            onClick={logout}
+            onClick={handleLogout}
+            disabled={isLoggingOut || loading}
           >
             <LogOut className={cn("h-5 w-5", collapsed ? "mx-0" : "mr-3")} />
-            {!collapsed && <span>Log Out</span>}
+            {!collapsed && <span>{isLoggingOut ? "Logging out..." : "Log Out"}</span>}
           </Button>
           
           {!collapsed && (

@@ -15,15 +15,23 @@ import {
 import { Bell, User, Settings, LogOut, ChevronDown } from "lucide-react";
 
 export function DashboardHeader() {
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const [unreadNotifications] = useState(3); // Mock data
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   if (!user) {
     return null;
   }
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true);
+      await logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -83,9 +91,13 @@ export function DashboardHeader() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+              <DropdownMenuItem 
+                onClick={handleLogout} 
+                className="cursor-pointer"
+                disabled={isLoggingOut || loading}
+              >
                 <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
+                <span>{isLoggingOut ? "Logging out..." : "Log out"}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
